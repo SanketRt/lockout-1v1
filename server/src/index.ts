@@ -77,7 +77,7 @@ app.post('/api/rooms/:code/start', async (req: Request, res: Response) => {
   const updated = await prisma.room.update({ where: { id: room.id }, data: { state: 'RUNNING', startAt, endAt }, include: { problems: true } })
   io.to(roomChannel(updated.code)).emit('room:update', { room: updated })
 
-  startPolling(updated)
+  startPolling({ id: updated.id, code: updated.code })
   res.json({ ok: true, room: updated })
 })
 
@@ -102,54 +102,61 @@ server.listen(PORT, async () => {
   console.log(`server on :${PORT}`)
 })
 
-async function startPolling(room: { id: string, code: string, p1Handle: string, p2Handle: string, startAt: Date | null, endAt: Date }) {
-  const roomId = room.id
-  await stopPolling(roomId)
+async function startPolling(room: { id: string; code: string }) {
+  await stopPolling(room.id)
+
   const tick = async () => {
     try {
-        const now = Date.now()
-        if (now >= room.endAt.getTime()) {
-        await prisma.room.update({ where: { id: roomId }, data: { state: "FINISHED" } })
-        io.to(roomChannel(room.code)).emit('room:update', { room: await prisma.room.findUnique({ where: { id: roomId }, include: { problems: true } }) })
-        await stopPolling(roomId)
+      const r = await prisma.room.findUnique({
+        where: { id: room.id },
+        include: { problems: true }
+      })
+      if (!r) return
+
+      const now = Date.now()
+      if (r.endAt && now >= new Date(r.endAt).getTime()) {
+        await prisma.room.update({ where: { id: r.id }, data: { state: 'FINISHED' } })
+        io.to(roomChannel(r.code)).emit('room:update', {
+          room: await prisma.room.findUnique({ where: { id: r.id }, include: { problems: true } })
+        })
+        await stopPolling(r.id)
         return
-        }
+      }
 
-        const r = await prisma.room.findUnique({ where: { id: roomId }, include: { problems: true } })
-        if (!r || !r.startAt) return
+      if (!r.startAt) return
 
-        for (const prob of r.problems) {
-        if (prob.solvedBy || prob.state === "LOCKED") continue
+      for (const prob of r.problems) {
+        if (prob.solvedBy || prob.state === 'LOCKED') continue
 
-        const hit1 = await firstSolveAfter(r.p1Handle, prob.contestId, prob.idx, r.startAt.getTime()).catch(e => { console.error('[cf]', e?.message || e); return null })
-        const hit2 = await firstSolveAfter(r.p2Handle, prob.contestId, prob.idx, r.startAt.getTime()).catch(e => { console.error('[cf]', e?.message || e); return null })
+        const hit1 = await firstSolveAfter(r.p1Handle, prob.contestId, prob.idx, new Date(r.startAt).getTime()).catch(() => null)
+        const hit2 = await firstSolveAfter(r.p2Handle, prob.contestId, prob.idx, new Date(r.startAt).getTime()).catch(() => null)
 
         console.log(`[poll] ${r.code} ${prob.contestId}${prob.idx} p1=${hit1?.when ?? '-'} p2=${hit2?.when ?? '-'}`)
 
-        let winner: Side | null = null
+        let winner: 'P1' | 'P2' | null = null
         let when: number | null = null
-        if (hit1 && hit2) { if (hit1.when < hit2.when) { winner = "P1"; when = hit1.when } else { winner = "P2"; when = hit2.when } }
-        else if (hit1) { winner = "P1"; when = hit1.when }
-        else if (hit2) { winner = "P2"; when = hit2.when }
+        if (hit1 && hit2) { if (hit1.when < hit2.when) { winner = 'P1'; when = hit1.when } else { winner = 'P2'; when = hit2.when } }
+        else if (hit1) { winner = 'P1'; when = hit1.when }
+        else if (hit2) { winner = 'P2'; when = hit2.when }
 
         if (winner) {
-            const lockedFor: Side = winner === "P1" ? "P2" : "P1"
-            console.log(`[lock] ${r.code} ${prob.contestId}${prob.idx} winner=${winner} when=${new Date(when!).toISOString()}`)
-            const updatedProb = await prisma.problem.update({
+          const lockedFor = winner === 'P1' ? 'P2' : 'P1'
+          console.log(`[lock] ${r.code} ${prob.contestId}${prob.idx} winner=${winner} when=${new Date(when!).toISOString()}`)
+          const updatedProb = await prisma.problem.update({
             where: { id: prob.id },
-            data: { solvedBy: winner, solvedAt: new Date(when!), state: "LOCKED", lockedFor }
-            })
-            io.to(roomChannel(r.code)).emit('problem:solved', { problem: updatedProb })
+            data: { solvedBy: winner, solvedAt: new Date(when!), state: 'LOCKED', lockedFor }
+          })
+          io.to(roomChannel(r.code)).emit('problem:solved', { problem: updatedProb })
         }
         await wait(400)
-        }
+      }
     } catch (e) {
-        console.error('[tick]', e)
+      console.error('[tick]', e)
     }
-    }
-  const handle = setInterval(tick, 5000)
-  pollers.set(roomId, handle)
-  // fire once soon
+  }
+
+  const handle: NodeJS.Timeout = setInterval(tick, 5_000)
+  pollers.set(room.id, handle)
   setTimeout(tick, 500)
 }
 
@@ -157,5 +164,6 @@ async function stopPolling(roomId: string) {
   const h = pollers.get(roomId)
   if (h) { clearInterval(h); pollers.delete(roomId) }
 }
+
 
 function wait(ms: number) { return new Promise(r => setTimeout(r, ms)) }
