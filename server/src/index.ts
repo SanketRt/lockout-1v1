@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import express from 'express'
+import express, { type Request, type Response } from 'express'
 import http from 'http'
 import cors from 'cors'
 import { Server } from 'socket.io'
@@ -24,7 +24,7 @@ const io = new Server(server, { cors: { origin: process.env.CORS_ORIGIN || '*' }
 const PORT = Number(process.env.PORT || 5177)
 
 // in-memory pollers per room
-const pollers = new Map<string, NodeJS.Timer>()
+const pollers = new Map<string, NodeJS.Timeout>()
 
 function roomChannel(code: string) { return `room:${code}` }
 
@@ -37,7 +37,7 @@ const CreateRoomSchema = z.object({
   durationMinutes: z.number().int().min(5).max(360)
 }).refine(v => v.ratingMin <= v.ratingMax, { message: 'ratingMin must be <= ratingMax' })
 
-app.post('/api/rooms', async (req, res) => {
+app.post('/api/rooms', async (req: Request, res: Response) => {
   const parsed = CreateRoomSchema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues })
   const { p1Handle, p2Handle, ratingMin, ratingMax, problemCount, durationMinutes } = parsed.data
@@ -60,13 +60,13 @@ app.post('/api/rooms', async (req, res) => {
   res.json({ code: room.code, room })
 })
 
-app.get('/api/rooms/:code', async (req, res) => {
+app.get('/api/rooms/:code', async (req: Request, res: Response) => {
   const room = await prisma.room.findUnique({ where: { code: req.params.code }, include: { problems: true } })
   if (!room) return res.status(404).json({ error: 'Room not found' })
   res.json({ room })
 })
 
-app.post('/api/rooms/:code/start', async (req, res) => {
+app.post('/api/rooms/:code/start', async (req: Request, res: Response) => {
   const room = await prisma.room.findUnique({ where: { code: req.params.code }, include: { problems: true } })
   if (!room) return res.status(404).json({ error: 'Room not found' })
   if (room.state !== 'PENDING') return res.status(400).json({ error: 'Already started' })
@@ -81,7 +81,7 @@ app.post('/api/rooms/:code/start', async (req, res) => {
   res.json({ ok: true, room: updated })
 })
 
-app.post('/api/rooms/:code/stop', async (req, res) => {
+app.post('/api/rooms/:code/stop', async (req: Request, res: Response) => {
   const room = await prisma.room.findUnique({ where: { code: req.params.code } })
   if (!room) return res.status(404).json({ error: 'Room not found' })
   await stopPolling(room.id)
@@ -102,7 +102,7 @@ server.listen(PORT, async () => {
   console.log(`server on :${PORT}`)
 })
 
-async function startPolling(room: { id: string, code: string, p1Handle: string, p2Handle: string, startAt: Date, endAt: Date }) {
+async function startPolling(room: { id: string, code: string, p1Handle: string, p2Handle: string, startAt: Date | null, endAt: Date }) {
   const roomId = room.id
   await stopPolling(roomId)
   const tick = async () => {
@@ -147,7 +147,7 @@ async function startPolling(room: { id: string, code: string, p1Handle: string, 
         console.error('[tick]', e)
     }
     }
-  const handle = setInterval(tick, 5_000)
+  const handle = setInterval(tick, 5000)
   pollers.set(roomId, handle)
   // fire once soon
   setTimeout(tick, 500)
