@@ -1,0 +1,39 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Room {
+  id              String   @id @default(cuid())
+  code            String   @unique
+  p1Handle        String
+  p2Handle        String
+  ratingMin       Int
+  ratingMax       Int
+  problemCount    Int
+  durationMinutes Int
+  startAt         DateTime?
+  endAt           DateTime?
+  state           String   @default("PENDING") // "PENDING" | "RUNNING" | "FINISHED"
+  problems        Problem[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Problem {
+  id        String   @id @default(cuid())
+  roomId    String
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  contestId Int
+  idx       String
+  name      String
+  rating    Int?
+  state     String   @default("OPEN") // "OPEN" | "LOCKED"
+  solvedBy  String?  // "P1" | "P2"
+  solvedAt  DateTime?
+  lockedFor String?  // "P1" | "P2"
+}

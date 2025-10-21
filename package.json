@@ -1,0 +1,13 @@
+{
+"name": "lockout-1v1",
+"private": true,
+"workspaces": ["server", "web"],
+"scripts": {
+"dev": "concurrently -n server,web -c blue,green \"pnpm --filter server dev\" \"pnpm --filter web dev\"",
+"server": "pnpm --filter server dev",
+"web": "pnpm --filter web dev"
+},
+"devDependencies": {
+"concurrently": "^9.0.1"
+}
+}
