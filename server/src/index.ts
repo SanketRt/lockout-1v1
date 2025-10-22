@@ -168,3 +168,11 @@ async function stopPolling(roomId: string) {
 
 
 function wait(ms: number) { return new Promise(r => setTimeout(r, ms)) }
+
+process.on('unhandledRejection', (e:any) => console.error('[unhandledRejection]', e?.message || e))
+process.on('uncaughtException',  (e:any) => console.error('[uncaughtException]',  e?.message || e))
+
+app.use((err: any, _req: any, res: any, _next: any) => {
+  console.error('[express]', err?.message || err)
+  res.status(500).json({ error: 'internal' })
+})
