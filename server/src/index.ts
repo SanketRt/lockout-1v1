@@ -132,7 +132,7 @@ async function startPolling(room: { id: string; code: string }) {
         const hit1 = await firstSolveAfter(r.p1Handle, prob.contestId, prob.idx, new Date(r.startAt).getTime()).catch(() => null)
         const hit2 = await firstSolveAfter(r.p2Handle, prob.contestId, prob.idx, new Date(r.startAt).getTime()).catch(() => null)
 
-        console.log(`[poll] ${r.code} ${prob.contestId}${prob.idx} p1=${hit1?.when ?? '-'} p2=${hit2?.when ?? '-'}`)
+        // console.log(`[poll] ${r.code} ${prob.contestId}${prob.idx} p1=${hit1?.when ?? '-'} p2=${hit2?.when ?? '-'}`)
 
         let winner: 'P1' | 'P2' | null = null
         let when: number | null = null
