@@ -3,7 +3,8 @@ import express, { type Request, type Response } from 'express'
 import http from 'http'
 import cors from 'cors'
 import { Server } from 'socket.io'
-import { PrismaClient } from '@prisma/client'
+import pkg from '@prisma/client'
+const { PrismaClient } = pkg
 
 type RoomState = 'PENDING' | 'RUNNING' | 'FINISHED'
 type ProblemState = 'OPEN' | 'LOCKED'
